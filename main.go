@@ -21,21 +21,28 @@ import (
 	"golang.zx2c4.com/wireguard/tun"
 )
 
+// // 退出标识：0表示成功退出 1表示失败退出
 const (
 	ExitSetupSuccess = 0
 	ExitSetupFailed  = 1
 )
 
+// 虚拟网卡标志
 const (
-	ENV_WG_TUN_FD             = "WG_TUN_FD"
-	ENV_WG_UAPI_FD            = "WG_UAPI_FD"
+	// TUN文件描述符
+	ENV_WG_TUN_FD = "WG_TUN_FD"
+	// 用户空间API文件描述符
+	ENV_WG_UAPI_FD = "WG_UAPI_FD"
+	// 进程前台
 	ENV_WG_PROCESS_FOREGROUND = "WG_PROCESS_FOREGROUND"
 )
 
+// 打印Usage
 func printUsage() {
 	fmt.Printf("Usage: %s [-f/--foreground] INTERFACE-NAME\n", os.Args[0])
 }
 
+// 根据操作系统打印waring
 func warning() {
 	switch runtime.GOOS {
 	case "linux", "freebsd", "openbsd":
@@ -58,15 +65,19 @@ func warning() {
 }
 
 func main() {
+	// 判断变量 打印版本
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		// 打印wireguard-go的版本信息
 		fmt.Printf("wireguard-go v%s\n\nUserspace WireGuard daemon for %s-%s.\nInformation available at https://www.wireguard.com.\nCopyright (C) Jason A. Donenfeld <Jason@zx2c4.com>.\n", Version, runtime.GOOS, runtime.GOARCH)
 		return
 	}
-
+	// 打印waring
 	warning()
 
 	var foreground bool
+
 	var interfaceName string
+	// 参数数小于2|| 大于3 打印用法并退出
 	if len(os.Args) < 2 || len(os.Args) > 3 {
 		printUsage()
 		return
@@ -74,6 +85,7 @@ func main() {
 
 	switch os.Args[1] {
 
+	// -f 设foregroup为true
 	case "-f", "--foreground":
 		foreground = true
 		if len(os.Args) != 3 {
@@ -81,7 +93,7 @@ func main() {
 			return
 		}
 		interfaceName = os.Args[2]
-
+	// 其他
 	default:
 		foreground = false
 		if len(os.Args) != 2 {
@@ -90,7 +102,7 @@ func main() {
 		}
 		interfaceName = os.Args[1]
 	}
-
+	// 如果foregroup== false 执行
 	if !foreground {
 		foreground = os.Getenv(ENV_WG_PROCESS_FOREGROUND) == "1"
 	}
@@ -110,25 +122,28 @@ func main() {
 	}()
 
 	// open TUN device (or use supplied fd)
-
+	// device包里是虚拟网卡的创建？
 	tdev, err := func() (tun.Device, error) {
+		// 从env中获取虚拟网卡的文件描述符
 		tunFdStr := os.Getenv(ENV_WG_TUN_FD)
+		// 如果没有则自己创建
 		if tunFdStr == "" {
 			return tun.CreateTUN(interfaceName, device.DefaultMTU)
 		}
 
 		// construct tun device from supplied fd
 
+		//
 		fd, err := strconv.ParseUint(tunFdStr, 10, 32)
 		if err != nil {
 			return nil, err
 		}
-
+		// 设置为非阻塞
 		err = unix.SetNonblock(int(fd), true)
 		if err != nil {
 			return nil, err
 		}
-
+		// 创建新文件用于tun device的创建
 		file := os.NewFile(uintptr(fd), "")
 		return tun.CreateTUNFromFile(file, device.DefaultMTU)
 	}()
@@ -139,14 +154,14 @@ func main() {
 			interfaceName = realInterfaceName
 		}
 	}
-
+	// 根据loglevel打印interfaceName信息
 	logger := device.NewLogger(
 		logLevel,
 		fmt.Sprintf("(%s) ", interfaceName),
 	)
 
 	logger.Verbosef("Starting wireguard-go version %s", Version)
-
+	// 创建tun出错，则以失败exit
 	if err != nil {
 		logger.Errorf("Failed to create TUN device: %v", err)
 		os.Exit(ExitSetupFailed)
@@ -175,7 +190,7 @@ func main() {
 		return
 	}
 	// daemonize the process
-
+	// 守护进程模式
 	if !foreground {
 		env := os.Environ()
 		env = append(env, fmt.Sprintf("%s=3", ENV_WG_TUN_FD))
@@ -202,13 +217,13 @@ func main() {
 			Dir: ".",
 			Env: env,
 		}
-
+		// Executable returns the path name for the executable that started the current process
 		path, err := os.Executable()
 		if err != nil {
 			logger.Errorf("Failed to determine executable: %v", err)
 			os.Exit(ExitSetupFailed)
 		}
-
+		// StartProcess starts a new process with the program, arguments and attributes specified by name, argv and attr.
 		process, err := os.StartProcess(
 			path,
 			os.Args,
@@ -218,17 +233,18 @@ func main() {
 			logger.Errorf("Failed to daemonize: %v", err)
 			os.Exit(ExitSetupFailed)
 		}
+		// Release releases any resources associated with the Process p, rendering it unusable in the future. Release only needs to be called if Wait is not.
 		process.Release()
 		return
 	}
-
+	// 根据创建的tun，创建新device
 	device := device.NewDevice(tdev, conn.NewDefaultBind(), logger)
 
 	logger.Verbosef("Device started")
 
 	errs := make(chan error)
 	term := make(chan os.Signal, 1)
-
+	//
 	uapi, err := ipc.UAPIListen(interfaceName, fileUAPI)
 	if err != nil {
 		logger.Errorf("Failed to listen on uapi socket: %v", err)

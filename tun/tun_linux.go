@@ -556,7 +556,7 @@ func CreateTUN(name string, mtu int) (Device, error) {
 		}
 		return nil, err
 	}
-
+	// struct ifreq 是一个数据结构，用于各种与接口相关的输入/输出控制 (ioctl) 调用。它的主要用途是在网络编程中获取和设置网络接口的属性
 	ifr, err := unix.NewIfreq(name)
 	if err != nil {
 		return nil, err

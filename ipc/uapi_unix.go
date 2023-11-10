@@ -33,19 +33,22 @@ func sockPath(iface string) string {
 }
 
 func UAPIOpen(name string) (*os.File, error) {
+	// 创建/var/run/wireguard文件夹
 	if err := os.MkdirAll(socketDirectory, 0o755); err != nil {
 		return nil, err
 	}
-
+	// /var/run/wireguard/name.sock
 	socketPath := sockPath(name)
+	//&UnixAddr{/var/run/wireguard/name.sock,unix}
 	addr, err := net.ResolveUnixAddr("unix", socketPath)
 	if err != nil {
 		return nil, err
 	}
-
+	// 赋予077权限 077代表着这个文件的所属者没有任何权限，所属组有所有权限（读，写，执行），其他用户有所有权限（读，写，执行）
 	oldUmask := unix.Umask(0o077)
 	defer unix.Umask(oldUmask)
-
+	//ListenUnix acts like Listen for Unix networks.
+	//The network must be "unix" or "unixpacket".
 	listener, err := net.ListenUnix("unix", addr)
 	if err == nil {
 		return listener.File()
