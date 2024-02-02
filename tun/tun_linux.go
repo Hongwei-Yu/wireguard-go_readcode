@@ -59,6 +59,7 @@ func (tun *NativeTun) File() *os.File {
 	return tun.tunFile
 }
 
+// 跨网络命名空间进行检测
 func (tun *NativeTun) routineHackListener() {
 	defer tun.hackListenerClosed.Unlock()
 	/* This is needed for the detection to work across network namespaces
@@ -107,15 +108,19 @@ func (tun *NativeTun) routineHackListener() {
 	}
 }
 
+// 创建netlinksocket这种ipc
 func createNetlinkSocket() (int, error) {
+	// 创建一个套接字
 	sock, err := unix.Socket(unix.AF_NETLINK, unix.SOCK_RAW|unix.SOCK_CLOEXEC, unix.NETLINK_ROUTE)
 	if err != nil {
 		return -1, err
 	}
+	// 创建AF_NETLINK type sockets.
 	saddr := &unix.SockaddrNetlink{
 		Family: unix.AF_NETLINK,
 		Groups: unix.RTMGRP_LINK | unix.RTMGRP_IPV4_IFADDR | unix.RTMGRP_IPV6_IFADDR,
 	}
+	// 将套接字与AF_NETLINK绑定
 	err = unix.Bind(sock, saddr)
 	if err != nil {
 		return -1, err
@@ -123,6 +128,7 @@ func createNetlinkSocket() (int, error) {
 	return sock, nil
 }
 
+// 监听 Netlink监听器
 func (tun *NativeTun) routineNetlinkListener() {
 	defer func() {
 		unix.Close(tun.netlinkSock)
@@ -130,7 +136,7 @@ func (tun *NativeTun) routineNetlinkListener() {
 		close(tun.events)
 		tun.netlinkCancel.Close()
 	}()
-
+	//
 	for msg := make([]byte, 1<<16); ; {
 		var err error
 		var msgn int
@@ -581,6 +587,7 @@ func CreateTUN(name string, mtu int) (Device, error) {
 	return CreateTUNFromFile(fd, mtu)
 }
 
+// 创建TUN
 // CreateTUNFromFile creates a Device from an os.File with the provided MTU.
 func CreateTUNFromFile(file *os.File, mtu int) (Device, error) {
 	tun := &NativeTun{

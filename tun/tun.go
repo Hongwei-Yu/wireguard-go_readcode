@@ -17,6 +17,7 @@ const (
 	EventMTUUpdate
 )
 
+// device抽象类型
 type Device interface {
 	// File returns the file descriptor of the device.
 	File() *os.File
